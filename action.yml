@@ -1,0 +1,45 @@
+name: Dependabot AI Review
+description: Review npm, pnpm, and GitHub Actions Dependabot updates with OpenAI
+author: Maximilian Franzke
+inputs:
+  github-token:
+    description: Write-capable GitHub App token
+    required: true
+  openai-api-key:
+    description: OpenAI API key
+    required: true
+  openai-model:
+    description: OpenAI model used for analysis
+    required: true
+  openai-base-url:
+    description: OpenAI-compatible API base URL
+    default: https://api.openai.com/v1
+  gitlab-token:
+    description: Optional GitLab token for private upstream projects
+    required: false
+  create-fix-pr:
+    description: Create or refresh a remediation PR when changes are required
+    default: "false"
+  max-context-characters:
+    description: Maximum repository context sent to the model
+    default: "600000"
+  exclude:
+    description: Newline-separated repository path globs to exclude
+    required: false
+outputs:
+  review-comment-url:
+    description: URL of the maintained review comment
+  risk-level:
+    description: Overall risk level reported by the model
+  fix-required:
+    description: Whether the model found required code changes
+  fix-pr-url:
+    description: URL of the remediation PR, when created
+  dependencies-reviewed:
+    description: Number of dependency updates reviewed
+runs:
+  using: node24
+  main: src/index.ts
+branding:
+  icon: shield
+  color: blue

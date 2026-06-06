@@ -1,0 +1,135 @@
+import type { DependencyUpdate } from "./types.ts";
+
+interface SourceRepository {
+  host: "github" | "gitlab";
+  owner: string;
+  repo: string;
+  url: string;
+}
+
+function normalizeRepository(value: unknown): SourceRepository | undefined {
+  const raw = typeof value === "string"
+    ? value
+    : value && typeof value === "object" && "url" in value ? String((value as { url: unknown }).url) : "";
+  const shorthand = raw.match(/^(github|gitlab):([^/]+)\/(.+)$/i);
+  const ssh = raw.match(/^(?:git\+ssh:\/\/git@|git@)(github\.com|gitlab\.com)[:/]([^/]+)\/(.+)$/i);
+  const normalized = shorthand
+    ? `https://${shorthand[1]!.toLowerCase()}.com/${shorthand[2]}/${shorthand[3]}`
+    : ssh
+      ? `https://${ssh[1]}/${ssh[2]}/${ssh[3]}`
+      : raw;
+  const cleaned = normalized.replace(/^git\+/, "").replace(/^git:\/\//, "https://").replace(/\.git(?:#.*)?$/, "");
+  const match = cleaned.match(/^https?:\/\/(github\.com|gitlab\.com)\/([^/]+)\/([^/#]+)(?:\/.*)?$/i);
+  if (!match) return undefined;
+  return {
+    host: match[1]!.toLowerCase() === "github.com" ? "github" : "gitlab",
+    owner: match[2]!,
+    repo: match[3]!,
+    url: `https://${match[1]}/${match[2]}/${match[3]}`,
+  };
+}
+
+async function responseText(response: Response, label: string): Promise<string> {
+  if (!response.ok) throw new Error(`${label}: HTTP ${response.status}`);
+  return response.text();
+}
+
+function truncate(value: string, maximum = 60_000): string {
+  return value.length <= maximum ? value : `${value.slice(0, maximum)}\n\n[truncated]`;
+}
+
+async function githubDetails(source: SourceRepository, from: string, to: string, token: string): Promise<Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff">> {
+  const headers = {
+    accept: "application/vnd.github+json",
+    authorization: `Bearer ${token}`,
+    "x-github-api-version": "2022-11-28",
+    "user-agent": "dependabot-review-action",
+  };
+  const candidates = (version: string) => [version, `v${version}`, `${source.repo}@${version}`];
+  let releaseNotes = "";
+  for (const tag of candidates(to)) {
+    const response = await fetch(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/tags/${encodeURIComponent(tag)}`, { headers });
+    if (response.ok) {
+      const release = await response.json() as { name?: string; body?: string; html_url?: string };
+      releaseNotes = `${release.name ?? tag}\n${release.body ?? ""}\n${release.html_url ?? ""}`;
+      break;
+    }
+  }
+  let upstreamDiff = "";
+  for (const oldRef of candidates(from)) {
+    for (const newRef of candidates(to)) {
+      const response = await fetch(
+        `https://api.github.com/repos/${source.owner}/${source.repo}/compare/${encodeURIComponent(oldRef)}...${encodeURIComponent(newRef)}`,
+        { headers: { ...headers, accept: "application/vnd.github.v3.diff" } },
+      );
+      if (response.ok) {
+        upstreamDiff = await response.text();
+        break;
+      }
+    }
+    if (upstreamDiff) break;
+  }
+  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff) };
+}
+
+async function gitlabDetails(source: SourceRepository, from: string, to: string, token?: string): Promise<Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff">> {
+  const project = encodeURIComponent(`${source.owner}/${source.repo}`);
+  const headers: Record<string, string> = token ? { "PRIVATE-TOKEN": token } : {};
+  const candidates = (version: string) => [version, `v${version}`, `${source.repo}@${version}`];
+  let releaseNotes = "";
+  for (const tag of candidates(to)) {
+    const response = await fetch(`https://gitlab.com/api/v4/projects/${project}/releases/${encodeURIComponent(tag)}`, { headers });
+    if (response.ok) {
+      const release = await response.json() as { name?: string; description?: string; _links?: { self?: string } };
+      releaseNotes = `${release.name ?? tag}\n${release.description ?? ""}\n${release._links?.self ?? ""}`;
+      break;
+    }
+  }
+  let upstreamDiff = "";
+  for (const oldRef of candidates(from)) {
+    for (const newRef of candidates(to)) {
+      const response = await fetch(
+        `https://gitlab.com/api/v4/projects/${project}/repository/compare?from=${encodeURIComponent(oldRef)}&to=${encodeURIComponent(newRef)}&straight=true`,
+        { headers },
+      );
+      if (response.ok) {
+        const comparison = await response.json() as { diffs?: Array<{ old_path: string; new_path: string; diff: string }> };
+        upstreamDiff = (comparison.diffs ?? []).map((diff) => `diff --git a/${diff.old_path} b/${diff.new_path}\n${diff.diff}`).join("\n");
+        break;
+      }
+    }
+    if (upstreamDiff) break;
+  }
+  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff) };
+}
+
+export async function enrichUpdate(
+  update: DependencyUpdate,
+  githubToken: string,
+  gitlabToken?: string,
+): Promise<DependencyUpdate> {
+  try {
+    let source = normalizeRepository(update.sourceUrl);
+    if (update.kind === "npm") {
+      const packageName = update.sourcePackage ?? update.name;
+      const metadataResponse = await fetch(`https://registry.npmjs.org/${encodeURIComponent(packageName)}`);
+      const metadata = JSON.parse(await responseText(metadataResponse, `npm metadata for ${update.name}`)) as {
+        repository?: unknown;
+        versions?: Record<string, { repository?: unknown }>;
+      };
+      source = normalizeRepository(metadata.versions?.[update.newVersion]?.repository ?? metadata.repository);
+    }
+    if (!source) return { ...update, upstreamWarning: "No supported GitHub or GitLab source repository could be resolved." };
+    const details = source.host === "github"
+      ? await githubDetails(source, update.previousVersion, update.newVersion, githubToken)
+      : await gitlabDetails(source, update.previousVersion, update.newVersion, gitlabToken);
+    return {
+      ...update,
+      sourceUrl: source.url,
+      ...details,
+      upstreamWarning: details.upstreamDiff ? undefined : "The upstream tag comparison could not be resolved.",
+    };
+  } catch (error) {
+    return { ...update, upstreamWarning: error instanceof Error ? error.message : String(error) };
+  }
+}

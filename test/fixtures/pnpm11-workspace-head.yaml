@@ -1,0 +1,27 @@
+lockfileVersion: '9.0'
+
+catalogs:
+  default:
+    zod:
+      specifier: ^4.0.0
+      version: 4.0.5
+
+importers:
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^5.8.0
+        version: 5.8.3
+  apps/web:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.0.5
+      '@example/aliased':
+        specifier: npm:lodash@^4.17.20
+        version: npm:lodash@4.17.22
+  packages/api:
+    dependencies:
+      zod:
+        specifier: 'catalog:'
+        version: 4.0.5

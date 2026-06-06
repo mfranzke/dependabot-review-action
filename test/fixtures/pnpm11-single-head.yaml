@@ -1,0 +1,37 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+  dedupePeers: true
+
+packageManager:
+  name: pnpm
+  version: 11.4.0
+
+patchedDependencies:
+  legacy-lib@1.0.0: abcdef012345
+
+configDependencies:
+  '@pnpm/trusted-deps':
+    version: 0.2.0
+    integrity: sha512-new
+
+importers:
+  .:
+    dependencies:
+      react:
+        specifier: ^19.1.0
+        version: 19.1.0
+      local-package:
+        specifier: workspace:*
+        version: link:packages/local-package
+    devDependencies:
+      vite:
+        specifier: ^6.1.0
+        version: 6.1.2(@types/node@22.0.0)
+
+packages:
+  react@19.1.0:
+    resolution:
+      integrity: sha512-new
