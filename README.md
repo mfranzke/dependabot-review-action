@@ -166,14 +166,53 @@ In the dedicated project's **Limits** settings:
 
 OpenAI project budgets are alerting thresholds, not hard spending caps:
 requests continue after the budget is exceeded. Model restrictions, rate
-limits, key rotation, and usage monitoring remain important. API billing is
-also separate from ChatGPT subscriptions; configure the
-[API billing account](https://platform.openai.com/account/billing/overview)
-before expecting the workflow to run.
+limits, key rotation, and usage monitoring remain important.
+
+ChatGPT Free, Plus, Pro, Business, and Enterprise subscriptions do not include
+general OpenAI API usage. A ChatGPT Pro subscription can include usage of
+ChatGPT and Codex, but its included usage or separately purchased ChatGPT/Codex
+credits cannot pay for API requests made by this GitHub Action. The API
+Platform is a separate pay-as-you-go service with separate billing.
+
+You can use the API while keeping your ChatGPT Pro subscription, but you must
+also activate API billing for the API organization that owns this project's
+service account. Configure the
+[API billing account](https://platform.openai.com/settings/organization/billing/overview)
+by adding a payment method and, when prompted, purchasing API credits before
+expecting the workflow to run.
+
+### Troubleshoot quota errors
+
+An HTTP `429` response with `code: insufficient_quota` is a billing or
+organization-quota error, not a temporary request-rate limit. Retrying the
+workflow will not resolve it.
+
+Check the organization associated with the API key in these places:
+
+1. [Billing overview](https://platform.openai.com/settings/organization/billing/overview):
+   activate API billing, add a payment method, and purchase API credits when
+   prompted. A ChatGPT subscription and ChatGPT/Codex credits do not fund API
+   requests.
+2. [Credit grants and balance](https://platform.openai.com/settings/organization/billing/credit-grants):
+   confirm that prepaid credits remain. If using prepaid billing, configure
+   auto-recharge and its monthly recharge limit as appropriate.
+3. [Usage dashboard](https://platform.openai.com/usage):
+   select the action's project in the dashboard's project filter and inspect
+   current spend and requests.
+4. [Organization limits](https://platform.openai.com/settings/organization/limits):
+   check whether the organization has reached its usage limit.
+
+The project's monthly budget under **Project → Limits** only sends alerts; it
+does not enforce a hard cap and is not the source of an
+`insufficient_quota` response. A different `429` mentioning a rate limit,
+requests per minute, or tokens per minute should instead be addressed through
+the model rate limits on that page.
 
 See OpenAI's documentation for
 [API-key permissions](https://help.openai.com/en/articles/8867743-assign-api-key-permissions),
 [project service accounts and limits](https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform),
+[prepaid billing](https://help.openai.com/en/articles/8264644-what-is-usage-based-billing),
+[API error codes](https://platform.openai.com/docs/guides/error-codes),
 [API-key safety](https://platform.openai.com/docs/api-reference/authentication),
 and
 [Responses API access](https://platform.openai.com/docs/guides/rbac).

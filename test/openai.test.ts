@@ -45,3 +45,18 @@ test("reports Responses API failures", async (t) => {
     /429.*rate limited/,
   );
 });
+
+test("explains insufficient API quota", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => Response.json({
+    error: {
+      message: "You exceeded your current quota",
+      type: "insufficient_quota",
+      code: "insufficient_quota",
+    },
+  }, { status: 429 }));
+  const client = new OpenAIClient("secret", "test-model", "https://example.test/v1");
+  await assert.rejects(
+    client.analyze([], { content: "", includedFiles: [], omittedFiles: [], totalCharacters: 0 }),
+    /quota is unavailable.*billing.*credit balance.*organization usage limits/i,
+  );
+});

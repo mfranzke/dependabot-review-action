@@ -83,7 +83,22 @@ export class OpenAIClient {
         },
       }),
     });
-    if (!response.ok) throw new Error(`OpenAI API ${response.status}: ${await response.text()}`);
+    if (!response.ok) {
+      const body = await response.text();
+      let code: string | undefined;
+      try {
+        code = (JSON.parse(body) as { error?: { code?: string } }).error?.code;
+      } catch {
+        // Preserve non-JSON API responses in the generic error below.
+      }
+      if (response.status === 429 && code === "insufficient_quota") {
+        throw new Error(
+          "OpenAI API quota is unavailable. Check API billing, credit balance, and organization usage limits: "
+          + "https://platform.openai.com/settings/organization/billing/overview",
+        );
+      }
+      throw new Error(`OpenAI API ${response.status}: ${body}`);
+    }
     const result = await response.json() as {
       output_text?: string;
       output?: Array<{ content?: Array<{ type?: string; text?: string }> }>;
