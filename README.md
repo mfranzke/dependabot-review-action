@@ -157,6 +157,8 @@ dialog; select **Restricted**.
 In the dedicated project's **Limits** settings:
 
 - Enable only the model configured by the workflow's `openai-model` input.
+- Use the model's exact, case-sensitive API ID, not its display name. For
+  example, the **GPT-5.4** display name uses the API ID `gpt-5.4`.
 - Lower that model's request and token rate limits to suit the expected number
   and size of Dependabot PRs. Keep the token limit large enough for the
   repository-context budget configured by `max-context-characters`.
@@ -175,6 +177,30 @@ See OpenAI's documentation for
 [API-key safety](https://platform.openai.com/docs/api-reference/authentication),
 and
 [Responses API access](https://platform.openai.com/docs/guides/rbac).
+
+### Choose a model
+
+The `openai-model` input must contain an exact model ID accepted by the
+Responses API. Model IDs are case-sensitive and normally lowercase:
+
+```yaml
+openai-model: gpt-5.4
+```
+
+Do not use the human-readable display label `GPT-5.4`; the API treats it as a
+different, nonexistent model. Consult the
+[OpenAI model catalog](https://developers.openai.com/api/docs/models) for
+current IDs, and verify that the selected model is enabled in the OpenAI
+project's **Limits** settings.
+
+An API `model_not_found` error usually means the ID is misspelled or uses the
+wrong capitalization. If the exact catalog ID still fails, check that the
+model is available to the API project associated with the key and is not
+disabled by the project's model-usage restrictions.
+
+When supplying the input through a GitHub repository variable, such as
+`${{ vars.OPENAI_MODEL }}`, set that variable to the API ID (`gpt-5.4`), without
+quotes, rather than the display label (`GPT-5.4`).
 
 ## Example workflow
 
@@ -212,7 +238,7 @@ jobs:
         with:
           github-app-token: ${{ steps.app-token.outputs.token }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          openai-model: your-approved-model
+          openai-model: gpt-5.4
           create-fix-pr: false
 ```
 
@@ -227,7 +253,7 @@ request head SHA.
 | --- | --- | --- | --- |
 | `github-app-token` | Yes | | GitHub App installation token with permission to publish review comments |
 | `openai-api-key` | Yes | | OpenAI API key |
-| `openai-model` | Yes | | Model approved by the consuming organization |
+| `openai-model` | Yes | | Exact, case-sensitive API model ID, for example `gpt-5.4` |
 | `openai-base-url` | No | `https://api.openai.com/v1` | Responses API base URL |
 | `gitlab-token` | No | | Token for private GitLab projects or higher limits |
 | `create-fix-pr` | No | `false` | Enable a separate remediation PR |

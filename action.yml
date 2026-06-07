@@ -9,7 +9,7 @@ inputs:
     description: OpenAI API key
     required: true
   openai-model:
-    description: OpenAI model used for analysis
+    description: Exact, case-sensitive OpenAI API model ID, for example gpt-5.4
     required: true
   openai-base-url:
     description: OpenAI-compatible API base URL
