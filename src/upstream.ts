@@ -40,17 +40,31 @@ function truncate(value: string, maximum = 60_000): string {
 
 type UpstreamDetails = Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff" | "releaseUrl" | "comparisonUrl">;
 
-async function githubDetails(source: SourceRepository, from: string, to: string, token: string): Promise<UpstreamDetails> {
+function unique(values: Array<string | undefined>): string[] {
+  return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+async function githubDetails(
+  source: SourceRepository,
+  from: string,
+  to: string,
+  token: string,
+  fromRelease?: string,
+  toRelease?: string,
+): Promise<UpstreamDetails> {
   const headers = {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
     "x-github-api-version": "2022-11-28",
     "user-agent": "dependabot-review-action",
   };
-  const candidates = (version: string) => [version, `v${version}`, `${source.repo}@${version}`];
+  const releaseCandidates = (version: string, release?: string) =>
+    unique([release, version, `v${version}`, `${source.repo}@${version}`]);
+  const comparisonCandidates = (version: string, release?: string) =>
+    unique([version, release, `v${version}`, `${source.repo}@${version}`]);
   let releaseNotes = "";
   let releaseUrl: string | undefined;
-  for (const tag of candidates(to)) {
+  for (const tag of releaseCandidates(to, toRelease)) {
     const response = await fetch(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/tags/${encodeURIComponent(tag)}`, { headers });
     if (response.ok) {
       const release = await response.json() as { name?: string; body?: string; html_url?: string };
@@ -59,10 +73,23 @@ async function githubDetails(source: SourceRepository, from: string, to: string,
       break;
     }
   }
+  if (!releaseNotes) {
+    for (const path of ["CHANGELOG.md", "Changelog.md", "changelog.md", "CHANGES.md", "HISTORY.md"]) {
+      const response = await fetch(
+        `https://api.github.com/repos/${source.owner}/${source.repo}/contents/${path}?ref=${encodeURIComponent(to)}`,
+        { headers: { ...headers, accept: "application/vnd.github.raw+json" } },
+      );
+      if (response.ok) {
+        releaseUrl = `${source.url}/blob/${encodeURIComponent(to)}/${path}`;
+        releaseNotes = `${path}\n${await response.text()}\n${releaseUrl}`;
+        break;
+      }
+    }
+  }
   let upstreamDiff = "";
   let comparisonUrl: string | undefined;
-  for (const oldRef of candidates(from)) {
-    for (const newRef of candidates(to)) {
+  for (const oldRef of comparisonCandidates(from, fromRelease)) {
+    for (const newRef of comparisonCandidates(to, toRelease)) {
       const response = await fetch(
         `https://api.github.com/repos/${source.owner}/${source.repo}/compare/${encodeURIComponent(oldRef)}...${encodeURIComponent(newRef)}`,
         { headers: { ...headers, accept: "application/vnd.github.v3.diff" } },
@@ -131,7 +158,14 @@ export async function enrichUpdate(
     }
     if (!source) return { ...update, upstreamWarning: "No supported GitHub or GitLab source repository could be resolved." };
     const details = source.host === "github"
-      ? await githubDetails(source, update.previousVersion, update.newVersion, githubToken)
+      ? await githubDetails(
+        source,
+        update.previousVersion,
+        update.newVersion,
+        githubToken,
+        update.previousRelease,
+        update.newRelease,
+      )
       : await gitlabDetails(source, update.previousVersion, update.newVersion, gitlabToken);
     return {
       ...update,

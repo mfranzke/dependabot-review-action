@@ -5,6 +5,8 @@ export interface DependencyUpdate {
   name: string;
   previousVersion: string;
   newVersion: string;
+  previousRelease?: string;
+  newRelease?: string;
   manifests: string[];
   sourcePackage?: string;
   sourceUrl?: string;

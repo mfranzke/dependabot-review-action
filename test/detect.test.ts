@@ -68,6 +68,16 @@ test("detects manifest and workflow updates", () => {
   assert.deepEqual(actions.map((update) => [update.name, update.previousVersion, update.newVersion]), [["actions/checkout", "v4", "v5"]]);
 });
 
+test("retains release tags from pinned action comments", () => {
+  const actions = detectActionUpdates(
+    "steps:\n  - uses: actions/checkout@old-sha # v4.2.2\n",
+    "steps:\n  - uses: actions/checkout@new-sha # v6.0.3\n",
+    ".github/workflows/ci.yml",
+  );
+  assert.equal(actions[0]?.previousRelease, "v4.2.2");
+  assert.equal(actions[0]?.newRelease, "v6.0.3");
+});
+
 test("merges manifest ranges into resolved lockfile updates", () => {
   const updates = deduplicateUpdates([
     { kind: "npm", name: "zod", previousVersion: "3.23.8", newVersion: "4.0.5", manifests: ["pnpm-lock.yaml"] },

@@ -169,10 +169,20 @@ export function detectManifestUpdates(base: string, head: string, path: string):
   return updates;
 }
 
-function workflowUses(content: string): Map<string, string> {
-  const result = new Map<string, string>();
-  const pattern = /^\s*(?:-\s*)?uses:\s*["']?([^@\s"']+)@([^\s"'#]+)["']?/gm;
-  for (const match of content.matchAll(pattern)) result.set(match[1]!, match[2]!);
+interface WorkflowUse {
+  ref: string;
+  release?: string;
+}
+
+function workflowUses(content: string): Map<string, WorkflowUse> {
+  const result = new Map<string, WorkflowUse>();
+  const pattern = /^\s*(?:-\s*)?uses:\s*["']?([^@\s"']+)@([^\s"'#]+)["']?(?:\s*#\s*(\S+))?/gm;
+  for (const match of content.matchAll(pattern)) {
+    const release = match[3] && /^v?\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.-]+)?$/.test(match[3])
+      ? match[3]
+      : undefined;
+    result.set(match[1]!, { ref: match[2]!, release });
+  }
   return result;
 }
 
@@ -180,12 +190,14 @@ export function detectActionUpdates(base: string, head: string, path: string): D
   const before = workflowUses(base);
   const after = workflowUses(head);
   return [...after.entries()]
-    .filter(([name, version]) => before.has(name) && before.get(name) !== version)
-    .map(([name, version]) => ({
+    .filter(([name, current]) => before.has(name) && before.get(name)?.ref !== current.ref)
+    .map(([name, current]) => ({
       kind: "github-action",
       name,
-      previousVersion: before.get(name)!,
-      newVersion: version,
+      previousVersion: before.get(name)!.ref,
+      newVersion: current.ref,
+      previousRelease: before.get(name)!.release,
+      newRelease: current.release,
       manifests: [path],
       sourceUrl: `https://github.com/${name}`,
     }));
