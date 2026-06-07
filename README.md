@@ -40,11 +40,17 @@ policies before enabling the action.
 
 ## GitHub App setup
 
-The GitHub App is required even when `create-fix-pr` is `false`. Workflows
-triggered by Dependabot receive a read-only built-in `GITHUB_TOKEN`, but this
-action must create or update a review comment on the Dependabot PR.
-`actions/create-github-app-token` exchanges the App credentials for a
-short-lived installation token that the review action can use.
+The documented configuration uses a GitHub App even when `create-fix-pr` is
+`false`. The App, rather than Dependabot, authors the review comment and any
+remediation PR. `actions/create-github-app-token` exchanges the App credentials
+for a short-lived installation token that the review action can use.
+
+This is an authentication choice made by this action, not a consequence of
+Dependabot being the PR author. GitHub can also grant the workflow's built-in
+`GITHUB_TOKEN` write permission through the workflow's `permissions` block.
+Using a separate App provides an explicit automation identity and, for
+remediation PRs, avoids the special workflow-triggering restrictions that
+apply to changes made with `GITHUB_TOKEN`.
 
 ### Required permissions
 
@@ -84,10 +90,21 @@ requests write access is needed to open the separate remediation PR.
 | `REVIEW_APP_PRIVATE_KEY` | The complete contents of the generated `.pem` private-key file |
 | `OPENAI_API_KEY` | The API key used to call the configured OpenAI-compatible endpoint |
 
-Dependabot-triggered workflows cannot read ordinary Actions secrets. These
-values must therefore be configured as Dependabot secrets, not only as
-repository or organization Actions secrets. Keep the private key restricted to
-administrators and rotate it if it is exposed.
+GitHub selects the available secret store from the actor that triggered the
+workflow, not from the identity that will later make API calls. Because the
+`pull_request` workflow is triggered by `dependabot[bot]`, ordinary repository
+or organization Actions secrets are not exposed to the run; only Dependabot
+secrets populate the `secrets` context. The generated installation token then
+authenticates subsequent comments, branch pushes, and PR creation as the
+GitHub App.
+
+These values must therefore be configured as Dependabot secrets for this
+workflow. If another workflow also needs them when triggered by non-Dependabot
+actors, store equivalent Actions secrets separately, usually under the same
+names. Keep the private key restricted to administrators and rotate it if it
+is exposed. See GitHub's
+[Dependabot workflow restrictions](https://docs.github.com/en/code-security/dependabot/troubleshooting-dependabot/troubleshooting-dependabot-on-github-actions)
+for the underlying token and secret rules.
 
 See GitHub's documentation for
 [registering a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app),
