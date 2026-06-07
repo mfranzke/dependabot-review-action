@@ -45,5 +45,5 @@ test("bounds grouped evidence and retains links", () => {
   assert.match(report, /example\/alpha\/compare/);
   assert.match(report, /example\/beta\/compare/);
   assert.match(report, /truncated|omitted/);
-  assert.match(report, /```\n\n<\/details>\n_Upstream material/);
+  assert.match(report, /```\n\n<\/details>\n\n_Upstream material/);
 });

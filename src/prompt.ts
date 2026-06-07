@@ -99,6 +99,7 @@ export function renderPromptReport(
   ].join("\n");
   const footer = [
     "",
+    "",
     "_Upstream material may be incomplete or truncated. Verify conclusions and run the repository's normal CI before merging._",
   ].join("\n");
 
