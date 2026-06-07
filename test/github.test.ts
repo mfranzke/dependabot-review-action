@@ -27,3 +27,20 @@ test("creates a marker comment when none exists", async (t) => {
   const github = new GitHubClient({ token: "token", owner: "owner", repo: "repo" });
   assert.equal(await github.upsertComment(1, "<!-- marker -->", "new"), "https://github.test/comment/new");
 });
+
+test("explains read-only comment permissions", async (t) => {
+  t.mock.method(globalThis, "fetch", async (_input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "POST") {
+      return Response.json(
+        { message: "Resource not accessible by integration" },
+        { status: 403 },
+      );
+    }
+    return Response.json([]);
+  });
+  const github = new GitHubClient({ token: "token", owner: "owner", repo: "repo" });
+  await assert.rejects(
+    github.upsertComment(1, "<!-- marker -->", "new"),
+    /token is read-only.*pull-requests: write.*write tokens.*GitHub App token/i,
+  );
+});

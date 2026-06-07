@@ -30,7 +30,20 @@ export class GitHubClient {
       },
     });
     if (!response.ok) {
-      throw new Error(`GitHub API ${response.status} for ${path}: ${await response.text()}`);
+      const body = await response.text();
+      if (
+        response.status === 403
+        && path.includes("/issues/")
+        && path.endsWith("/comments")
+        && body.includes("Resource not accessible by integration")
+      ) {
+        throw new Error(
+          "GitHub could not publish the review comment because the token is read-only. "
+          + "Grant pull-requests: write and enable write tokens for pull request workflows, "
+          + "or pass a GitHub App token.",
+        );
+      }
+      throw new Error(`GitHub API ${response.status} for ${path}: ${body}`);
     }
     if (response.status === 204) return undefined as T;
     return response.json() as Promise<T>;

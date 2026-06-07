@@ -50,8 +50,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  issues: write
+  pull-requests: write
 
 jobs:
   review:
@@ -64,11 +63,19 @@ jobs:
           github-token: ${{ github.token }}
 ```
 
-The explicit `issues: write` permission allows the built-in `GITHUB_TOKEN` to
-create or update the PR comment. The comment is authored by
-`github-actions[bot]`. Dependabot workflows receive a read-only token by
-default, but GitHub allows the workflow `permissions` block to increase its
-scope.
+The explicit `pull-requests: write` permission allows the built-in
+`GITHUB_TOKEN` to create or update the PR comment. The comment is authored by
+`github-actions[bot]`.
+
+Dependabot `pull_request` workflows are treated like fork workflows. In the
+repository's **Settings → Actions → General → Fork pull request workflows**,
+enable **Send write tokens to workflows from pull requests** when that control
+is available. Without permission to send a write token, GitHub downgrades the
+requested scope and comment creation fails with
+`Resource not accessible by integration`. If repository or organization
+policy does not expose or allow that control, use a GitHub App installation
+token instead. See
+[GitHub's Actions permission settings](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/managing-github-actions-settings-for-a-repository).
 
 ## Automated OpenAI review
 
@@ -85,8 +92,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
-  issues: write
+  pull-requests: write
 
 jobs:
   review:
@@ -117,6 +123,10 @@ Dependabot.
 Repository content, changelogs, and upstream diffs are treated as untrusted
 data in model instructions. Review your organization's source-code and AI data
 policies before enabling this mode.
+
+This workflow needs the same **Send write tokens to workflows from pull
+requests** repository setting described above. The action reads checked-out
+repository content but does not execute it.
 
 ### OpenAI API setup
 
