@@ -88,7 +88,7 @@ requests write access is needed to open the separate remediation PR.
 | --- | --- |
 | `REVIEW_APP_ID` | The numeric App ID shown on the GitHub App settings page |
 | `REVIEW_APP_PRIVATE_KEY` | The complete contents of the generated `.pem` private-key file |
-| `OPENAI_API_KEY` | The API key used to call the configured OpenAI-compatible endpoint |
+| `OPENAI_API_KEY` | A restricted project service-account key; see **OpenAI API setup** below |
 
 GitHub selects the available secret store from the actor that triggered the
 workflow, not from the identity that will later make API calls. Because the
@@ -111,6 +111,70 @@ See GitHub's documentation for
 [installing your own GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app),
 and
 [`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
+
+## OpenAI API setup
+
+The action sends repository context and dependency information to
+`POST /v1/responses`. It does not upload files, create Assistants, fine-tune
+models, or manage OpenAI resources.
+
+For automation, use a dedicated OpenAI project and project service account
+rather than a personal key:
+
+1. Open the
+   [OpenAI projects page](https://platform.openai.com/settings/organization/projects)
+   and create a project for this action, for example
+   `dependabot-review-action`.
+2. In that project's **Members** settings, create a service account with a
+   descriptive name, for example `dependabot-review-action GitHub`. Copy the
+   generated secret immediately; OpenAI only displays the full value once.
+3. Keep the new project selected in the project switcher, open **API Keys** in
+   the main navigation, find the service-account key, select its edit control,
+   and set **Permissions** to **Restricted**.
+4. Configure the key permissions as follows:
+
+| Section | Setting | Permission |
+| --- | --- | --- |
+| **Model capabilities** | Responses (`/v1/responses`) | **Read-write** |
+| **Model capabilities** | Text-to-speech, Realtime, Chat completions, Embeddings, Images, Moderations | **None** |
+| Other settings | List models, Assistants, Threads, Evals, Fine-tuning, Files, Videos, Vector Stores, Prompts, Datasets | **None** |
+
+The action only sends `POST /v1/responses` requests, so it does not need
+permission to list models or use any other endpoint. **Read** is insufficient
+because creating a response requires **Read-write**.
+
+5. Store the secret value as the `OPENAI_API_KEY` Dependabot secret described
+   above. Do not commit it, include it directly in workflow YAML, or expose it
+   in logs.
+
+Service-account keys initially receive broad project API access. Review and
+restrict the key after creating the service account. For a user-owned key, the
+same **All**, **Restricted**, or **Read Only** choice appears in the key-creation
+dialog; select **Restricted**.
+
+### Limit usage and spend
+
+In the dedicated project's **Limits** settings:
+
+- Enable only the model configured by the workflow's `openai-model` input.
+- Lower that model's request and token rate limits to suit the expected number
+  and size of Dependabot PRs. Keep the token limit large enough for the
+  repository-context budget configured by `max-context-characters`.
+- Set a monthly project budget and notification thresholds.
+
+OpenAI project budgets are alerting thresholds, not hard spending caps:
+requests continue after the budget is exceeded. Model restrictions, rate
+limits, key rotation, and usage monitoring remain important. API billing is
+also separate from ChatGPT subscriptions; configure the
+[API billing account](https://platform.openai.com/account/billing/overview)
+before expecting the workflow to run.
+
+See OpenAI's documentation for
+[API-key permissions](https://help.openai.com/en/articles/8867743-assign-api-key-permissions),
+[project service accounts and limits](https://help.openai.com/en/articles/9186755-managing-projects-in-the-api-platform),
+[API-key safety](https://platform.openai.com/docs/api-reference/authentication),
+and
+[Responses API access](https://platform.openai.com/docs/guides/rbac).
 
 ## Example workflow
 
