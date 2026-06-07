@@ -40,17 +40,60 @@ policies before enabling the action.
 
 ## GitHub App setup
 
-Automatic Dependabot workflows receive a read-only built-in `GITHUB_TOKEN`.
-Create a GitHub App instead, install it on each consuming repository, and grant:
+The GitHub App is required even when `create-fix-pr` is `false`. Workflows
+triggered by Dependabot receive a read-only built-in `GITHUB_TOKEN`, but this
+action must create or update a review comment on the Dependabot PR.
+`actions/create-github-app-token` exchanges the App credentials for a
+short-lived installation token that the review action can use.
 
-- **Contents:** Read and write
-- **Pull requests:** Read and write
+### Required permissions
+
+For review comments only (`create-fix-pr: false`), grant these repository
+permissions to the GitHub App:
+
+- **Contents:** Read
+- **Pull requests:** Read
 - **Issues:** Read and write
 - **Metadata:** Read
 
-Store the App ID, private key, and OpenAI key as
-[Dependabot secrets](https://docs.github.com/en/code-security/dependabot/working-with-dependabot/managing-encrypted-secrets-for-dependabot).
-Do not store them only as ordinary Actions secrets.
+When remediation PRs are enabled (`create-fix-pr: true`), increase:
+
+- **Contents:** Read and write
+- **Pull requests:** Read and write
+
+Contents write access is needed to push the remediation branch, and pull
+requests write access is needed to open the separate remediation PR.
+
+### Create and install the App
+
+1. Under your personal or organization settings, open **Developer settings**,
+   then **GitHub Apps**, and select **New GitHub App**.
+2. Give the App the repository permissions listed above. A webhook is not
+   required for this action.
+3. On the App settings page, generate a private key and download the `.pem`
+   file.
+4. Select **Install App** and install it on the repository or repositories that
+   will run this action.
+5. Open the repository's **Settings**, select **Secrets and variables**,
+   **Dependabot**, and add the following
+   [Dependabot secrets](https://docs.github.com/en/code-security/how-tos/secure-your-supply-chain/manage-your-dependency-security/configure-access-to-private-registries#storing-credentials-for-dependabot-to-use):
+
+| Secret | Value |
+| --- | --- |
+| `REVIEW_APP_ID` | The numeric App ID shown on the GitHub App settings page |
+| `REVIEW_APP_PRIVATE_KEY` | The complete contents of the generated `.pem` private-key file |
+| `OPENAI_API_KEY` | The API key used to call the configured OpenAI-compatible endpoint |
+
+Dependabot-triggered workflows cannot read ordinary Actions secrets. These
+values must therefore be configured as Dependabot secrets, not only as
+repository or organization Actions secrets. Keep the private key restricted to
+administrators and rotate it if it is exposed.
+
+See GitHub's documentation for
+[registering a GitHub App](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/registering-a-github-app),
+[installing your own GitHub App](https://docs.github.com/en/apps/using-github-apps/installing-your-own-github-app),
+and
+[`actions/create-github-app-token`](https://github.com/actions/create-github-app-token).
 
 ## Example workflow
 
@@ -86,21 +129,22 @@ jobs:
       - name: Review dependency update
         uses: mfranzke/dependabot-review-action@v1
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
+          github-app-token: ${{ steps.app-token.outputs.token }}
           openai-api-key: ${{ secrets.OPENAI_API_KEY }}
           openai-model: your-approved-model
           create-fix-pr: false
 ```
 
-Set `create-fix-pr: true` to allow a separate remediation PR. This requires the
-Dependabot branch to exist in the same repository and the checkout to point
-exactly at the pull request head SHA.
+Set `create-fix-pr: true` to allow a separate remediation PR and grant the App
+the additional write permissions described above. The Dependabot branch must
+exist in the same repository, and the checkout must point exactly at the pull
+request head SHA.
 
 ## Inputs
 
 | Input | Required | Default | Description |
 | --- | --- | --- | --- |
-| `github-token` | Yes | | Write-capable GitHub App token |
+| `github-app-token` | Yes | | GitHub App installation token with permission to publish review comments |
 | `openai-api-key` | Yes | | OpenAI API key |
 | `openai-model` | Yes | | Model approved by the consuming organization |
 | `openai-base-url` | No | `https://api.openai.com/v1` | Responses API base URL |

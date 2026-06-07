@@ -50,7 +50,7 @@ async function detectUpdates(
 }
 
 async function main(): Promise<void> {
-  const githubToken = input("github-token", true);
+  const githubToken = input("github-app-token", true);
   const openaiApiKey = input("openai-api-key", true);
   const openaiModel = input("openai-model", true);
   const openaiBaseUrl = input("openai-base-url") || "https://api.openai.com/v1";

@@ -2,8 +2,8 @@ name: Dependabot AI Review
 description: Review npm, pnpm, and GitHub Actions Dependabot updates with OpenAI
 author: Maximilian Franzke
 inputs:
-  github-token:
-    description: Write-capable GitHub App token
+  github-app-token:
+    description: GitHub App installation token with permission to publish review comments
     required: true
   openai-api-key:
     description: OpenAI API key
