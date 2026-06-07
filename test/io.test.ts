@@ -3,7 +3,7 @@ import test from "node:test";
 import { input } from "../src/io.ts";
 
 test("reads hyphenated GitHub Action inputs", (t) => {
-  const key = "INPUT_GITHUB-APP-TOKEN";
+  const key = "INPUT_GITHUB-TOKEN";
   const previous = process.env[key];
   process.env[key] = "  installation-token  ";
   t.after(() => {
@@ -11,11 +11,11 @@ test("reads hyphenated GitHub Action inputs", (t) => {
     else process.env[key] = previous;
   });
 
-  assert.equal(input("github-app-token", true), "installation-token");
+  assert.equal(input("github-token", true), "installation-token");
 });
 
 test("reports a missing required input", (t) => {
-  const key = "INPUT_GITHUB-APP-TOKEN";
+  const key = "INPUT_GITHUB-TOKEN";
   const previous = process.env[key];
   delete process.env[key];
   t.after(() => {
@@ -24,7 +24,7 @@ test("reports a missing required input", (t) => {
   });
 
   assert.throws(
-    () => input("github-app-token", true),
-    /Missing required input: github-app-token/,
+    () => input("github-token", true),
+    /Missing required input: github-token/,
   );
 });

@@ -1,4 +1,5 @@
 import { collectRepositoryContext } from "./context.ts";
+import { readConfig } from "./config.ts";
 import {
   deduplicateUpdates,
   detectActionUpdates,
@@ -8,8 +9,10 @@ import {
   inspectPnpmFeatures,
 } from "./detect.ts";
 import { GitHubClient, readPullRequestContext } from "./github.ts";
-import { booleanInput, fail, info, input, setOutput, warning } from "./io.ts";
+import { fail, info, setOutput, warning } from "./io.ts";
 import { OpenAIClient } from "./openai.ts";
+import { setPromptOutputs } from "./outputs.ts";
+import { renderPromptReport } from "./prompt.ts";
 import { createOrUpdateRemediation } from "./remediation.ts";
 import { COMMENT_MARKER, renderReport } from "./report.ts";
 import type { DependencyUpdate } from "./types.ts";
@@ -50,20 +53,11 @@ async function detectUpdates(
 }
 
 async function main(): Promise<void> {
-  const githubToken = input("github-app-token", true);
-  const openaiApiKey = input("openai-api-key", true);
-  const openaiModel = input("openai-model", true);
-  const openaiBaseUrl = input("openai-base-url") || "https://api.openai.com/v1";
-  const gitlabToken = input("gitlab-token");
-  const maxContextCharacters = Number(input("max-context-characters") || "600000");
-  const customExcludes = input("exclude").split(/\r?\n/).map((line) => line.trim());
+  const config = readConfig();
   const workspace = process.env.GITHUB_WORKSPACE ?? process.cwd();
-  if (!Number.isSafeInteger(maxContextCharacters) || maxContextCharacters < 10_000) {
-    throw new Error("max-context-characters must be an integer of at least 10000");
-  }
 
   const context = await readPullRequestContext();
-  const github = new GitHubClient({ token: githubToken, owner: context.owner, repo: context.repo });
+  const github = new GitHubClient({ token: config.githubToken, owner: context.owner, repo: context.repo });
   info(`Inspecting Dependabot PR #${context.number}`);
   const detected = await detectUpdates(github, context.number, context.baseSha, context.headSha);
   if (detected.length === 0) throw new Error("No supported npm, pnpm, or GitHub Actions dependency updates were detected");
@@ -82,18 +76,32 @@ async function main(): Promise<void> {
     }
   }
 
-  const updates = await Promise.all(detected.map((update) => enrichUpdate(update, githubToken, gitlabToken)));
-  const repositoryContext = await collectRepositoryContext(workspace, updates, maxContextCharacters, customExcludes);
+  const updates = await Promise.all(detected.map((update) =>
+    enrichUpdate(update, config.githubToken, config.gitlabToken)
+  ));
+  if (config.reviewMode === "prompt") {
+    const commentUrl = await github.upsertComment(context.number, COMMENT_MARKER, renderPromptReport(updates));
+    setPromptOutputs(commentUrl, updates.length);
+    info(`Review prompt published: ${commentUrl}`);
+    return;
+  }
+
+  const repositoryContext = await collectRepositoryContext(
+    workspace,
+    updates,
+    config.maxContextCharacters,
+    config.customExcludes,
+  );
   if (repositoryContext.omittedFiles.length) {
     warning(`${repositoryContext.omittedFiles.length} repository files were omitted by safety or context limits`);
   }
 
-  const openai = new OpenAIClient(openaiApiKey, openaiModel, openaiBaseUrl);
+  const openai = new OpenAIClient(config.openaiApiKey!, config.openaiModel!, config.openaiBaseUrl);
   const analysis = await openai.analyze(updates, repositoryContext);
   let fixPrUrl: string | undefined;
   let remediationWarning: string | undefined;
 
-  if (analysis.fixRequired && booleanInput("create-fix-pr")) {
+  if (analysis.fixRequired && config.createFixPr) {
     try {
       const generated = await openai.createPatch(updates, repositoryContext, analysis);
       fixPrUrl = await createOrUpdateRemediation(github, context, generated.patch, generated.summary, workspace);

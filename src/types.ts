@@ -8,6 +8,8 @@ export interface DependencyUpdate {
   manifests: string[];
   sourcePackage?: string;
   sourceUrl?: string;
+  releaseUrl?: string;
+  comparisonUrl?: string;
   releaseNotes?: string;
   upstreamDiff?: string;
   upstreamWarning?: string;

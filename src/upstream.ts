@@ -38,7 +38,9 @@ function truncate(value: string, maximum = 60_000): string {
   return value.length <= maximum ? value : `${value.slice(0, maximum)}\n\n[truncated]`;
 }
 
-async function githubDetails(source: SourceRepository, from: string, to: string, token: string): Promise<Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff">> {
+type UpstreamDetails = Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff" | "releaseUrl" | "comparisonUrl">;
+
+async function githubDetails(source: SourceRepository, from: string, to: string, token: string): Promise<UpstreamDetails> {
   const headers = {
     accept: "application/vnd.github+json",
     authorization: `Bearer ${token}`,
@@ -47,15 +49,18 @@ async function githubDetails(source: SourceRepository, from: string, to: string,
   };
   const candidates = (version: string) => [version, `v${version}`, `${source.repo}@${version}`];
   let releaseNotes = "";
+  let releaseUrl: string | undefined;
   for (const tag of candidates(to)) {
     const response = await fetch(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/tags/${encodeURIComponent(tag)}`, { headers });
     if (response.ok) {
       const release = await response.json() as { name?: string; body?: string; html_url?: string };
       releaseNotes = `${release.name ?? tag}\n${release.body ?? ""}\n${release.html_url ?? ""}`;
+      releaseUrl = release.html_url;
       break;
     }
   }
   let upstreamDiff = "";
+  let comparisonUrl: string | undefined;
   for (const oldRef of candidates(from)) {
     for (const newRef of candidates(to)) {
       const response = await fetch(
@@ -64,28 +69,32 @@ async function githubDetails(source: SourceRepository, from: string, to: string,
       );
       if (response.ok) {
         upstreamDiff = await response.text();
+        comparisonUrl = `${source.url}/compare/${encodeURIComponent(oldRef)}...${encodeURIComponent(newRef)}`;
         break;
       }
     }
     if (upstreamDiff) break;
   }
-  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff) };
+  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff), releaseUrl, comparisonUrl };
 }
 
-async function gitlabDetails(source: SourceRepository, from: string, to: string, token?: string): Promise<Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff">> {
+async function gitlabDetails(source: SourceRepository, from: string, to: string, token?: string): Promise<UpstreamDetails> {
   const project = encodeURIComponent(`${source.owner}/${source.repo}`);
   const headers: Record<string, string> = token ? { "PRIVATE-TOKEN": token } : {};
   const candidates = (version: string) => [version, `v${version}`, `${source.repo}@${version}`];
   let releaseNotes = "";
+  let releaseUrl: string | undefined;
   for (const tag of candidates(to)) {
     const response = await fetch(`https://gitlab.com/api/v4/projects/${project}/releases/${encodeURIComponent(tag)}`, { headers });
     if (response.ok) {
       const release = await response.json() as { name?: string; description?: string; _links?: { self?: string } };
       releaseNotes = `${release.name ?? tag}\n${release.description ?? ""}\n${release._links?.self ?? ""}`;
+      releaseUrl = release._links?.self;
       break;
     }
   }
   let upstreamDiff = "";
+  let comparisonUrl: string | undefined;
   for (const oldRef of candidates(from)) {
     for (const newRef of candidates(to)) {
       const response = await fetch(
@@ -95,12 +104,13 @@ async function gitlabDetails(source: SourceRepository, from: string, to: string,
       if (response.ok) {
         const comparison = await response.json() as { diffs?: Array<{ old_path: string; new_path: string; diff: string }> };
         upstreamDiff = (comparison.diffs ?? []).map((diff) => `diff --git a/${diff.old_path} b/${diff.new_path}\n${diff.diff}`).join("\n");
+        comparisonUrl = `${source.url}/-/compare/${encodeURIComponent(oldRef)}...${encodeURIComponent(newRef)}`;
         break;
       }
     }
     if (upstreamDiff) break;
   }
-  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff) };
+  return { releaseNotes: truncate(releaseNotes, 20_000), upstreamDiff: truncate(upstreamDiff), releaseUrl, comparisonUrl };
 }
 
 export async function enrichUpdate(

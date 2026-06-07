@@ -1,16 +1,19 @@
-name: Dependabot AI Review
-description: Review npm, pnpm, and GitHub Actions Dependabot updates with OpenAI
+name: Dependabot Review
+description: Prepare local review prompts or automate reviews for Dependabot updates
 author: Maximilian Franzke
 inputs:
-  github-app-token:
-    description: GitHub App installation token with permission to publish review comments
+  github-token:
+    description: GitHub token with permission to read the PR and publish review comments
     required: true
+  review-mode:
+    description: Review mode, either prompt or openai
+    default: prompt
   openai-api-key:
-    description: OpenAI API key
-    required: true
+    description: OpenAI API key, required when review-mode is openai
+    required: false
   openai-model:
-    description: Exact, case-sensitive OpenAI API model ID, for example gpt-5.4
-    required: true
+    description: Exact OpenAI API model ID, required when review-mode is openai
+    required: false
   openai-base-url:
     description: OpenAI-compatible API base URL
     default: https://api.openai.com/v1
@@ -30,9 +33,9 @@ outputs:
   review-comment-url:
     description: URL of the maintained review comment
   risk-level:
-    description: Overall risk level reported by the model
+    description: Overall risk level in openai mode; empty in prompt mode
   fix-required:
-    description: Whether the model found required code changes
+    description: Whether openai mode found required code changes; empty in prompt mode
   fix-pr-url:
     description: URL of the remediation PR, when created
   dependencies-reviewed:
