@@ -40,12 +40,33 @@ test("uses action version comments to resolve releases for SHA pins", async (t) 
   t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
     const url = String(input);
     requests.push(url);
-    if (url.includes("/releases/tags/v6.0.3")) {
-      return Response.json({
-        name: "v6.0.3",
-        body: "SHA-256 repository fixes",
-        html_url: "https://github.com/actions/checkout/releases/tag/v6.0.3",
-      });
+    if (url.includes("/releases?per_page=100&page=1")) {
+      return Response.json([
+        {
+          tag_name: "v6.0.3",
+          name: "v6.0.3",
+          body: "SHA-256 repository fixes\n\n**Full Changelog**: https://github.com/actions/checkout/compare/v6...v6.0.3",
+          html_url: "https://github.com/actions/checkout/releases/tag/v6.0.3",
+        },
+        {
+          tag_name: "v6.0.0",
+          name: "v6.0.0",
+          body: "Node 24 and credential storage changes",
+          html_url: "https://github.com/actions/checkout/releases/tag/v6.0.0",
+        },
+        {
+          tag_name: "v5.0.0",
+          name: "v5.0.0",
+          body: "Node 24 runtime",
+          html_url: "https://github.com/actions/checkout/releases/tag/v5.0.0",
+        },
+        {
+          tag_name: "v4.2.2",
+          name: "v4.2.2",
+          body: "Already installed",
+          html_url: "https://github.com/actions/checkout/releases/tag/v4.2.2",
+        },
+      ]);
     }
     if (url.includes("/compare/old-sha...new-sha")) {
       return new Response("diff --git a/action.yml b/action.yml");
@@ -66,8 +87,12 @@ test("uses action version comments to resolve releases for SHA pins", async (t) 
 
   assert.equal(result.releaseUrl, "https://github.com/actions/checkout/releases/tag/v6.0.3");
   assert.match(result.releaseNotes ?? "", /SHA-256 repository fixes/);
+  assert.match(result.releaseNotes ?? "", /Node 24 and credential storage changes/);
+  assert.match(result.releaseNotes ?? "", /Node 24 runtime/);
+  assert.doesNotMatch(result.releaseNotes ?? "", /Already installed/);
+  assert.doesNotMatch(result.releaseNotes ?? "", /compare\/v6\.\.\.v6\.0\.3/);
   assert.equal(result.comparisonUrl, "https://github.com/actions/checkout/compare/old-sha...new-sha");
-  assert.ok(requests.some((url) => url.includes("/releases/tags/v6.0.3")));
+  assert.ok(requests.some((url) => url.includes("/releases?per_page=100&page=1")));
 });
 
 test("resolves releases and comparisons for direct action tags", async (t) => {

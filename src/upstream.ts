@@ -40,8 +40,101 @@ function truncate(value: string, maximum = 60_000): string {
 
 type UpstreamDetails = Pick<DependencyUpdate, "releaseNotes" | "upstreamDiff" | "releaseUrl" | "comparisonUrl">;
 
+interface SemanticVersion {
+  major: number;
+  minor: number;
+  patch: number;
+  prerelease?: string;
+}
+
+interface GitHubRelease {
+  tag_name: string;
+  name?: string;
+  body?: string;
+  html_url?: string;
+  draft?: boolean;
+}
+
 function unique(values: Array<string | undefined>): string[] {
   return [...new Set(values.filter((value): value is string => Boolean(value)))];
+}
+
+function semanticVersion(value: string | undefined): SemanticVersion | undefined {
+  if (!value) return undefined;
+  const candidate = value.slice(value.lastIndexOf("@") + 1).replace(/^v/, "");
+  const match = candidate.match(/^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/);
+  if (!match) return undefined;
+  return {
+    major: Number(match[1]),
+    minor: Number(match[2]),
+    patch: Number(match[3]),
+    prerelease: match[4],
+  };
+}
+
+function compareSemanticVersions(left: SemanticVersion, right: SemanticVersion): number {
+  for (const key of ["major", "minor", "patch"] as const) {
+    if (left[key] !== right[key]) return left[key] - right[key];
+  }
+  if (left.prerelease === right.prerelease) return 0;
+  if (!left.prerelease) return 1;
+  if (!right.prerelease) return -1;
+  return left.prerelease.localeCompare(right.prerelease, undefined, { numeric: true });
+}
+
+function withoutGeneratedComparison(body: string): string {
+  return body
+    .split("\n")
+    .filter((line) =>
+      !/^\s*(?:[-*]\s*)?\**Full Changelog\**:\s*https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/compare\/\S+\s*$/i.test(line)
+    )
+    .join("\n")
+    .trim();
+}
+
+async function githubReleaseRange(
+  source: SourceRepository,
+  from: string | undefined,
+  to: string | undefined,
+  headers: Record<string, string>,
+): Promise<{ notes: string; url?: string } | undefined> {
+  const lower = semanticVersion(from);
+  const upper = semanticVersion(to);
+  if (!lower || !upper || compareSemanticVersions(lower, upper) >= 0) return undefined;
+
+  const releases: Array<{ release: GitHubRelease; version: SemanticVersion }> = [];
+  for (let page = 1; page <= 3; page++) {
+    const response = await fetch(
+      `https://api.github.com/repos/${source.owner}/${source.repo}/releases?per_page=100&page=${page}`,
+      { headers },
+    );
+    if (!response.ok) return undefined;
+    const batch = await response.json() as GitHubRelease[];
+    for (const release of batch) {
+      const version = semanticVersion(release.tag_name);
+      if (
+        !release.draft
+        && version
+        && compareSemanticVersions(version, lower) > 0
+        && compareSemanticVersions(version, upper) <= 0
+      ) {
+        releases.push({ release, version });
+      }
+    }
+    if (batch.length < 100) break;
+  }
+  if (!releases.length) return undefined;
+
+  releases.sort((left, right) => compareSemanticVersions(right.version, left.version));
+  const notes = releases.map(({ release }) => {
+    const body = withoutGeneratedComparison(release.body ?? "");
+    return [
+      `## ${release.name ?? release.tag_name}`,
+      body,
+      release.html_url ?? "",
+    ].filter(Boolean).join("\n");
+  }).join("\n\n");
+  return { notes, url: releases[0]!.release.html_url };
 }
 
 async function githubDetails(
@@ -64,13 +157,23 @@ async function githubDetails(
     unique([version, release, `v${version}`, `${source.repo}@${version}`]);
   let releaseNotes = "";
   let releaseUrl: string | undefined;
-  for (const tag of releaseCandidates(to, toRelease)) {
-    const response = await fetch(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/tags/${encodeURIComponent(tag)}`, { headers });
-    if (response.ok) {
-      const release = await response.json() as { name?: string; body?: string; html_url?: string };
-      releaseNotes = `${release.name ?? tag}\n${release.body ?? ""}\n${release.html_url ?? ""}`;
-      releaseUrl = release.html_url;
-      break;
+  const releaseRange = await githubReleaseRange(source, fromRelease ?? from, toRelease ?? to, headers);
+  if (releaseRange) {
+    releaseNotes = releaseRange.notes;
+    releaseUrl = releaseRange.url;
+  } else {
+    for (const tag of releaseCandidates(to, toRelease)) {
+      const response = await fetch(`https://api.github.com/repos/${source.owner}/${source.repo}/releases/tags/${encodeURIComponent(tag)}`, { headers });
+      if (response.ok) {
+        const release = await response.json() as GitHubRelease;
+        releaseNotes = [
+          release.name ?? tag,
+          withoutGeneratedComparison(release.body ?? ""),
+          release.html_url ?? "",
+        ].filter(Boolean).join("\n");
+        releaseUrl = release.html_url;
+        break;
+      }
     }
   }
   if (!releaseNotes) {
