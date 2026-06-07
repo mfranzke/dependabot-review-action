@@ -25,6 +25,8 @@ test("renders a copyable prompt without repository source", () => {
   assert.match(report, /BEGIN UNTRUSTED RELEASE NOTES/);
   assert.match(report, /https:\/\/github\.com\/example\/alpha\/compare/);
   assert.match(report, /\[comparison\]\(<https:\/\/github\.com\/example\/alpha\/compare/);
+  assert.match(report, /<details>\n<summary>Copyable review prompt<\/summary>\n\n```/);
+  assert.match(report, /```\n\n<\/details>/);
   assert.doesNotMatch(report, /--- FILE:/);
 });
 
@@ -43,5 +45,5 @@ test("bounds grouped evidence and retains links", () => {
   assert.match(report, /example\/alpha\/compare/);
   assert.match(report, /example\/beta\/compare/);
   assert.match(report, /truncated|omitted/);
-  assert.match(report, /```\n_Upstream material/);
+  assert.match(report, /```\n\n<\/details>\n_Upstream material/);
 });

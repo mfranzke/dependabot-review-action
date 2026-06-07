@@ -2,6 +2,8 @@ import type { DependencyUpdate } from "./types.ts";
 import { COMMENT_MARKER } from "./report.ts";
 
 const DEFAULT_MAX_COMMENT_CHARACTERS = 60_000;
+const PROMPT_DETAILS_OPEN = "<details>\n<summary>Copyable review prompt</summary>\n\n";
+const PROMPT_DETAILS_CLOSE = "\n\n</details>";
 
 function markdownFence(content: string): string {
   const longest = Math.max(0, ...[...content.matchAll(/`+/g)].map((match) => match[0].length));
@@ -94,8 +96,6 @@ export function renderPromptReport(
     "",
     updateLinks(updates),
     "",
-    "## Copyable prompt",
-    "",
   ].join("\n");
   const footer = [
     "",
@@ -104,22 +104,33 @@ export function renderPromptReport(
 
   let prompt = buildPrompt(updates, 0);
   let fence = markdownFence(prompt);
-  const wrapperLength = intro.length + footer.length + fence.length * 2 + 4;
+  const wrapperLength = intro.length
+    + PROMPT_DETAILS_OPEN.length
+    + PROMPT_DETAILS_CLOSE.length
+    + footer.length
+    + fence.length * 2
+    + 4;
   const evidenceBudget = Math.max(0, maximumCharacters - wrapperLength - prompt.length);
   prompt = buildPrompt(updates, evidenceBudget);
   fence = markdownFence(prompt);
 
-  const report = `${intro}${fence}\n${prompt}\n${fence}${footer}`;
+  const report = `${intro}${PROMPT_DETAILS_OPEN}${fence}\n${prompt}\n${fence}${PROMPT_DETAILS_CLOSE}${footer}`;
   if (report.length <= maximumCharacters) return report;
 
   const compactPrompt = buildPrompt(updates, 0);
   const compactFence = markdownFence(compactPrompt);
   const available = Math.max(
     0,
-    maximumCharacters - intro.length - footer.length - compactFence.length * 2 - 6,
+    maximumCharacters
+      - intro.length
+      - PROMPT_DETAILS_OPEN.length
+      - PROMPT_DETAILS_CLOSE.length
+      - footer.length
+      - compactFence.length * 2
+      - 6,
   );
   const fittedPrompt = compactPrompt.length <= available
     ? compactPrompt
     : `${compactPrompt.slice(0, Math.max(0, available - 39))}\n[additional updates omitted for size]`;
-  return `${intro}${compactFence}\n${fittedPrompt}\n${compactFence}${footer}`;
+  return `${intro}${PROMPT_DETAILS_OPEN}${compactFence}\n${fittedPrompt}\n${compactFence}${PROMPT_DETAILS_CLOSE}${footer}`;
 }
