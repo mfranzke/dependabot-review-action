@@ -1,7 +1,7 @@
 import { appendFileSync } from "node:fs";
 
 export function input(name: string, required = false): string {
-  const key = `INPUT_${name.replaceAll("-", "_").toUpperCase()}`;
+  const key = `INPUT_${name.replaceAll(" ", "_").toUpperCase()}`;
   const value = process.env[key]?.trim() ?? "";
   if (required && !value) throw new Error(`Missing required input: ${name}`);
   return value;
