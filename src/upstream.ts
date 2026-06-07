@@ -82,14 +82,35 @@ function compareSemanticVersions(left: SemanticVersion, right: SemanticVersion):
   return left.prerelease.localeCompare(right.prerelease, undefined, { numeric: true });
 }
 
-function withoutGeneratedComparison(body: string): string {
-  return body
-    .split("\n")
-    .filter((line) =>
-      !/^\s*(?:[-*]\s*)?\**Full Changelog\**:\s*https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/compare\/\S+\s*$/i.test(line)
-    )
-    .join("\n")
-    .trim();
+function filteredReleaseNotes(body: string): string {
+  const result: string[] = [];
+  let skippingContributors = false;
+
+  for (const line of body.split("\n")) {
+    const heading = line.match(/^\s*(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      const title = heading[2]!.replace(/[*_`]/g, "").trim();
+      if (/^new contributors:?$/i.test(title)) {
+        skippingContributors = true;
+        while (result.at(-1)?.trim() === "") result.pop();
+        continue;
+      }
+      skippingContributors = false;
+    }
+    if (skippingContributors) {
+      if (!line.trim()) continue;
+      if (/^\s*[-*+]\s+.*\bmade (?:their|his|her) first contribution\b/i.test(line)) continue;
+      skippingContributors = false;
+    }
+    if (
+      /^\s*(?:[-*]\s*)?\**Full Changelog\**:\s*https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/compare\/\S+\s*$/i.test(line)
+    ) {
+      continue;
+    }
+    result.push(line);
+  }
+
+  return result.join("\n").trim();
 }
 
 async function githubReleaseRange(
@@ -127,7 +148,7 @@ async function githubReleaseRange(
 
   releases.sort((left, right) => compareSemanticVersions(right.version, left.version));
   const notes = releases.map(({ release }) => {
-    const body = withoutGeneratedComparison(release.body ?? "");
+    const body = filteredReleaseNotes(release.body ?? "");
     return [
       `## ${release.name ?? release.tag_name}`,
       body,
@@ -168,7 +189,7 @@ async function githubDetails(
         const release = await response.json() as GitHubRelease;
         releaseNotes = [
           release.name ?? tag,
-          withoutGeneratedComparison(release.body ?? ""),
+          filteredReleaseNotes(release.body ?? ""),
           release.html_url ?? "",
         ].filter(Boolean).join("\n");
         releaseUrl = release.html_url;
@@ -184,7 +205,7 @@ async function githubDetails(
       );
       if (response.ok) {
         releaseUrl = `${source.url}/blob/${encodeURIComponent(to)}/${path}`;
-        releaseNotes = `${path}\n${await response.text()}\n${releaseUrl}`;
+        releaseNotes = `${path}\n${filteredReleaseNotes(await response.text())}\n${releaseUrl}`;
         break;
       }
     }

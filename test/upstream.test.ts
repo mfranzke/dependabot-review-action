@@ -51,7 +51,15 @@ test("uses action version comments to resolve releases for SHA pins", async (t) 
         {
           tag_name: "v6.0.0",
           name: "v6.0.0",
-          body: "Node 24 and credential storage changes",
+          body: [
+            "Node 24 and credential storage changes",
+            "",
+            "* Prepare release v6.0.0",
+            "",
+            "## New Contributors",
+            "* @example made their first contribution",
+            "https://github.com/actions/checkout/releases/tag/v6.0.0?from=release-body",
+          ].join("\n"),
           html_url: "https://github.com/actions/checkout/releases/tag/v6.0.0",
         },
         {
@@ -88,8 +96,11 @@ test("uses action version comments to resolve releases for SHA pins", async (t) 
   assert.equal(result.releaseUrl, "https://github.com/actions/checkout/releases/tag/v6.0.3");
   assert.match(result.releaseNotes ?? "", /SHA-256 repository fixes/);
   assert.match(result.releaseNotes ?? "", /Node 24 and credential storage changes/);
+  assert.match(result.releaseNotes ?? "", /\* Prepare release v6\.0\.0/);
+  assert.match(result.releaseNotes ?? "", /releases\/tag\/v6\.0\.0\?from=release-body/);
   assert.match(result.releaseNotes ?? "", /Node 24 runtime/);
   assert.doesNotMatch(result.releaseNotes ?? "", /Already installed/);
+  assert.doesNotMatch(result.releaseNotes ?? "", /New Contributors|first contribution/);
   assert.doesNotMatch(result.releaseNotes ?? "", /compare\/v6\.\.\.v6\.0\.3/);
   assert.equal(result.comparisonUrl, "https://github.com/actions/checkout/compare/old-sha...new-sha");
   assert.ok(requests.some((url) => url.includes("/releases?per_page=100&page=1")));
@@ -129,7 +140,18 @@ test("falls back to a changelog at the target ref", async (t) => {
   t.mock.method(globalThis, "fetch", async (input: string | URL | Request) => {
     const url = String(input);
     if (url.includes("/contents/CHANGELOG.md?ref=new-sha")) {
-      return new Response("# Changelog\n\n## v2\nUseful changes");
+      return new Response([
+        "# Changelog",
+        "",
+        "## v2",
+        "Useful changes",
+        "",
+        "### New Contributors",
+        "* @example made their first contribution",
+        "",
+        "### Fixes",
+        "Important fix",
+      ].join("\n"));
     }
     if (url.includes("/compare/old-sha...new-sha")) {
       return new Response("diff --git a/index.js b/index.js");
@@ -148,4 +170,6 @@ test("falls back to a changelog at the target ref", async (t) => {
 
   assert.equal(result.releaseUrl, "https://github.com/example/action/blob/new-sha/CHANGELOG.md");
   assert.match(result.releaseNotes ?? "", /Useful changes/);
+  assert.match(result.releaseNotes ?? "", /Important fix/);
+  assert.doesNotMatch(result.releaseNotes ?? "", /New Contributors|first contribution/);
 });
