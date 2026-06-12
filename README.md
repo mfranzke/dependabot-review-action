@@ -58,7 +58,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Prepare dependency review prompt
-        uses: mfranzke/dependabot-review-action@v1
+        uses: mfranzke/dependabot-review-action@v0.1.0
         with:
           github-token: ${{ github.token }}
 ```
@@ -107,7 +107,7 @@ jobs:
           persist-credentials: false
 
       - name: Review dependency update
-        uses: mfranzke/dependabot-review-action@v1
+        uses: mfranzke/dependabot-review-action@v0.1.0
         with:
           github-token: ${{ github.token }}
           review-mode: openai
@@ -236,7 +236,7 @@ jobs:
           persist-credentials: false
 
       - name: Review and remediate dependency update
-        uses: mfranzke/dependabot-review-action@v1
+        uses: mfranzke/dependabot-review-action@v0.1.0
         with:
           github-token: ${{ steps.app-token.outputs.token }}
           review-mode: openai
