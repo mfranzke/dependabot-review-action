@@ -87,6 +87,6 @@ test("merges manifest ranges into resolved lockfile updates", () => {
   assert.deepEqual(updates[0]?.manifests, ["pnpm-lock.yaml", "package.json"]);
 });
 
-test("rejects malformed pnpm YAML", () => {
-  assert.throws(() => detectPnpmUpdates("lockfileVersion: '9.0'\ninvalid", "lockfileVersion: '9.0'"));
+test("tolerates non-mapping lines in pnpm YAML", () => {
+  assert.doesNotThrow(() => detectPnpmUpdates("lockfileVersion: '9.0'\ninvalid", "lockfileVersion: '9.0'"));
 });

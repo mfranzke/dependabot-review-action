@@ -65,7 +65,7 @@ export function parseYamlMappings(content: string): YamlRecord {
     const line = stripComment(original.trim());
     if (!line || line.startsWith("- ")) continue;
     const mapping = splitMapping(line);
-    if (!mapping) throw new Error(`Unsupported YAML at line ${lineNumber + 1}`);
+    if (!mapping) continue; // ponytail: skip non-mapping lines (sequences, flow continuations) — only importers mappings matter
     while (stack.length > 1 && indent <= stack.at(-1)!.indent) stack.pop();
     const parent = stack.at(-1)!.value;
     const mappingKey = key(mapping[0]);
