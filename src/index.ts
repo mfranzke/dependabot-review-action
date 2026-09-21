@@ -5,6 +5,7 @@ import {
   detectActionUpdates,
   detectManifestUpdates,
   detectPackageLockUpdates,
+  detectPnpmCatalogUpdates,
   detectPnpmUpdates,
   inspectPnpmFeatures,
 } from "./detect.ts";
@@ -31,6 +32,8 @@ async function detectUpdates(
     const relevant = path === "package-lock.json"
       || path === "pnpm-lock.yaml"
       || path.endsWith("/pnpm-lock.yaml")
+      || path === "pnpm-workspace.yaml"
+      || path.endsWith("/pnpm-workspace.yaml")
       || path === "package.json"
       || path.endsWith("/package.json")
       || /^\.github\/workflows\/.+\.ya?ml$/.test(path);
@@ -41,7 +44,8 @@ async function detectUpdates(
     ]);
     if (base === undefined || head === undefined) continue;
     try {
-      if (path.endsWith("pnpm-lock.yaml")) updates.push(...detectPnpmUpdates(base, head, path));
+      if (path.endsWith("pnpm-workspace.yaml")) updates.push(...detectPnpmCatalogUpdates(base, head, path));
+      else if (path.endsWith("pnpm-lock.yaml")) updates.push(...detectPnpmUpdates(base, head, path));
       else if (path.endsWith("package-lock.json")) updates.push(...detectPackageLockUpdates(base, head, path));
       else if (path.endsWith("package.json")) updates.push(...detectManifestUpdates(base, head, path));
       else updates.push(...detectActionUpdates(base, head, path));

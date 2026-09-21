@@ -6,6 +6,7 @@ import {
   detectActionUpdates,
   detectManifestUpdates,
   detectPackageLockUpdates,
+  detectPnpmCatalogUpdates,
   detectPnpmUpdates,
   deduplicateUpdates,
   inspectPnpmFeatures,
@@ -44,12 +45,21 @@ test("detects catalog-only version bumps when importers are unchanged", () => {
   ]);
 });
 
-test("detects flat default `catalog:` shorthand version bumps", () => {
+test("detects flat default `catalog:` shorthand bumps in pnpm-workspace.yaml", () => {
   const base = "catalog:\n  postcss: 8.5.28\n  webpack: 5.105.2\n";
   const head = "catalog:\n  postcss: 8.5.29\n  webpack: 5.105.2\n";
-  const updates = detectPnpmUpdates(base, head, "pnpm-workspace.yaml");
+  const updates = detectPnpmCatalogUpdates(base, head);
   assert.deepEqual(updates.map(({ name, previousVersion, newVersion, manifests }) => ({ name, previousVersion, newVersion, manifests })), [
     { name: "postcss", previousVersion: "8.5.28", newVersion: "8.5.29", manifests: ["pnpm-workspace.yaml"] },
+  ]);
+});
+
+test("detects named-catalog object bumps in pnpm-workspace.yaml", () => {
+  const base = "catalogs:\n  build:\n    webpack: 5.105.1\n";
+  const head = "catalogs:\n  build:\n    webpack: 5.105.2\n";
+  const updates = detectPnpmCatalogUpdates(base, head);
+  assert.deepEqual(updates.map(({ name, previousVersion, newVersion }) => ({ name, previousVersion, newVersion })), [
+    { name: "webpack", previousVersion: "5.105.1", newVersion: "5.105.2" },
   ]);
 });
 

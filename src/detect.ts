@@ -104,6 +104,42 @@ export function inspectPnpmFeatures(content: string, packageJson?: string, works
   };
 }
 
+function collectCatalogUpdates(
+  grouped: Map<string, DependencyUpdate>,
+  baseDocument: UnknownRecord,
+  headDocument: UnknownRecord,
+  manifests: string[],
+): void {
+  const before = pnpmCatalogVersions(baseDocument);
+  const after = pnpmCatalogVersions(headDocument);
+  for (const [name, current] of after) {
+    const previous = before.get(name);
+    if (!previous || previous === current) continue;
+    const identity = `${name}\0${previous}\0${current}`;
+    const existing = grouped.get(identity);
+    if (existing) {
+      for (const manifest of manifests) {
+        if (!existing.manifests.includes(manifest)) existing.manifests.push(manifest);
+      }
+    } else {
+      grouped.set(identity, {
+        kind: "npm",
+        name,
+        previousVersion: previous,
+        newVersion: current,
+        manifests: [...new Set(manifests)],
+      });
+    }
+  }
+}
+
+/** Detects catalog version bumps declared directly in pnpm-workspace.yaml. */
+export function detectPnpmCatalogUpdates(base: string, head: string, path = "pnpm-workspace.yaml"): DependencyUpdate[] {
+  const grouped = new Map<string, DependencyUpdate>();
+  collectCatalogUpdates(grouped, object(parseYaml(base)), object(parseYaml(head)), [path]);
+  return [...grouped.values()];
+}
+
 export function detectPnpmUpdates(base: string, head: string, path = "pnpm-lock.yaml"): DependencyUpdate[] {
   const baseLock = object(parseYaml(base));
   const headLock = object(parseYaml(head));
@@ -132,25 +168,8 @@ export function detectPnpmUpdates(base: string, head: string, path = "pnpm-lock.
     }
   }
 
-  const beforeCatalogs = pnpmCatalogVersions(baseLock);
-  const afterCatalogs = pnpmCatalogVersions(headLock);
-  for (const [name, current] of afterCatalogs) {
-    const previous = beforeCatalogs.get(name);
-    if (!previous || previous === current) continue;
-    const identity = `${name}\0${previous}\0${current}`;
-    const existing = grouped.get(identity);
-    if (existing) {
-      if (!existing.manifests.includes("pnpm-workspace.yaml")) existing.manifests.push("pnpm-workspace.yaml");
-    } else {
-      grouped.set(identity, {
-        kind: "npm",
-        name,
-        previousVersion: previous,
-        newVersion: current,
-        manifests: [...new Set(["pnpm-workspace.yaml", path])],
-      });
-    }
-  }
+  // Catalog versions in the lockfile resolve to concrete versions; attribute them to the workspace file authors edit.
+  collectCatalogUpdates(grouped, baseLock, headLock, ["pnpm-workspace.yaml", path]);
   return [...grouped.values()];
 }
 
