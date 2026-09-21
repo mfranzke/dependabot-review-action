@@ -31,6 +31,24 @@ function pnpmAliasPackage(value: string): string | undefined {
   return separator > 0 ? alias.slice(0, separator) : undefined;
 }
 
+function pnpmCatalogVersions(document: UnknownRecord): Map<string, string> {
+  const result = new Map<string, string>();
+  // The plural `catalogs` map (named catalogs, lockfile format) and the singular
+  // `catalog` shorthand (default catalog in pnpm-workspace.yaml) both apply.
+  const catalogs = [object(document.catalog), ...Object.values(object(document.catalogs))];
+  for (const catalog of catalogs) {
+    for (const [name, rawEntry] of Object.entries(object(catalog))) {
+      // Entries are either `pkg: version` (workspace shorthand) or `pkg: { specifier, version }` (lockfile).
+      const resolved = text(rawEntry) ?? text(object(rawEntry).version);
+      if (!resolved) continue;
+      const version = cleanPnpmVersion(resolved);
+      if (/^(link|workspace|file):/.test(version)) continue;
+      result.set(name, version);
+    }
+  }
+  return result;
+}
+
 function pnpmImporterDependencies(lockfile: UnknownRecord): Map<string, { version: string; importer: string; sourcePackage?: string }> {
   const result = new Map<string, { version: string; importer: string; sourcePackage?: string }>();
   const importers = object(lockfile.importers);
@@ -109,6 +127,26 @@ export function detectPnpmUpdates(base: string, head: string, path = "pnpm-lock.
         newVersion: current.version,
         manifests: [manifest, path],
         sourcePackage: current.sourcePackage,
+      });
+    }
+  }
+
+  const beforeCatalogs = pnpmCatalogVersions(baseLock);
+  const afterCatalogs = pnpmCatalogVersions(headLock);
+  for (const [name, current] of afterCatalogs) {
+    const previous = beforeCatalogs.get(name);
+    if (!previous || previous === current) continue;
+    const identity = `${name}\0${previous}\0${current}`;
+    const existing = grouped.get(identity);
+    if (existing) {
+      if (!existing.manifests.includes("pnpm-workspace.yaml")) existing.manifests.push("pnpm-workspace.yaml");
+    } else {
+      grouped.set(identity, {
+        kind: "npm",
+        name,
+        previousVersion: previous,
+        newVersion: current,
+        manifests: ["pnpm-workspace.yaml", path],
       });
     }
   }

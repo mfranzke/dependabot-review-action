@@ -30,9 +30,18 @@ test("groups pnpm workspace catalog updates and handles npm aliases", async () =
     await fixture("pnpm11-workspace-head.yaml"),
   );
   const zod = updates.find((update) => update.name === "zod");
-  assert.deepEqual(zod?.manifests, ["apps/web/package.json", "pnpm-lock.yaml", "packages/api/package.json"]);
+  assert.deepEqual(zod?.manifests, ["apps/web/package.json", "pnpm-lock.yaml", "packages/api/package.json", "pnpm-workspace.yaml"]);
   assert.equal(updates.find((update) => update.name === "@example/aliased")?.newVersion, "4.17.22");
   assert.equal(updates.find((update) => update.name === "@example/aliased")?.sourcePackage, "lodash");
+});
+
+test("detects catalog-only version bumps when importers are unchanged", () => {
+  const base = "lockfileVersion: '9.0'\ncatalogs:\n  default:\n    zod:\n      specifier: ^3.23.0\n      version: 3.23.8\nimporters:\n  .: {}\n";
+  const head = "lockfileVersion: '9.0'\ncatalogs:\n  default:\n    zod:\n      specifier: ^4.0.0\n      version: 4.0.5\nimporters:\n  .: {}\n";
+  const updates = detectPnpmUpdates(base, head);
+  assert.deepEqual(updates.map(({ name, previousVersion, newVersion, manifests }) => ({ name, previousVersion, newVersion, manifests })), [
+    { name: "zod", previousVersion: "3.23.8", newVersion: "4.0.5", manifests: ["pnpm-workspace.yaml", "pnpm-lock.yaml"] },
+  ]);
 });
 
 test("feature-detects pnpm 11 additions independently of lockfile version", async () => {
