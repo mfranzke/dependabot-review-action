@@ -94,7 +94,8 @@ export function inspectPnpmFeatures(content: string, packageJson?: string, works
   return {
     lockfileVersion: text(lockfile.lockfileVersion),
     pnpmMajor: match ? Number(match[1]) : undefined,
-    hasCatalogs: Object.keys(object(lockfile.catalogs)).length > 0 || Object.keys(object(workspace.catalogs)).length > 0,
+    hasCatalogs: [lockfile.catalog, lockfile.catalogs, workspace.catalog, workspace.catalogs]
+      .some((value) => Object.keys(object(value)).length > 0),
     hasConfigDependencies: Object.keys(object(lockfile.configDependencies)).length > 0
       || Object.keys(object(workspace.configDependencies)).length > 0,
     hasPackageManagerResolution: "packageManager" in lockfile || "packageManager" in object(lockfile.devEngines),
@@ -146,7 +147,7 @@ export function detectPnpmUpdates(base: string, head: string, path = "pnpm-lock.
         name,
         previousVersion: previous,
         newVersion: current,
-        manifests: ["pnpm-workspace.yaml", path],
+        manifests: [...new Set(["pnpm-workspace.yaml", path])],
       });
     }
   }
